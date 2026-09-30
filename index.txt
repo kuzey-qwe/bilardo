@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BILARDILDO</title>
+    <link rel="icon" type="image/png" sizes="192x192" href="favicon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #111827; color: white; font-family: 'Inter', sans-serif; touch-action: none; }
+        #game-container { position: relative; width: 100vw; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        canvas { box-shadow: 0 10px 40px rgba(0,0,0,0.8); border-radius: 8px; max-width: 100%; max-height: 80vh; background-color: #0d2b14; }
+        .hidden { display: none !important; }
+        .wood-bg {
+            background-color: #4a3018;
+            background-image: radial-gradient(#5c3e24 15%, transparent 16%), radial-gradient(#5c3e24 15%, transparent 16%);
+            background-size: 30px 30px;
+            background-position: 0 0, 15px 15px;
+        }
+        .pool-text { text-shadow: 2px 2px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        
+        <!-- Loading Screen -->
+        <div id="ui-loading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 z-50 transition-opacity duration-500">
+            <h1 class="text-6xl font-black mb-6 text-green-500 tracking-widest pool-text italic">BILARDO</h1>
+            <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-green-500 mb-4"></div>
+            <p id="loading-text" class="text-gray-300 text-xl">Connecting to server...</p>
+        </div>
+
+        <!-- Main Menu -->
+        <div id="ui-menu" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-gray-900 z-40 wood-bg">
+            <div class="bg-gray-800 p-10 rounded-2xl shadow-2xl border-4 border-green-700 text-center max-w-md w-full mx-4 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 to-blue-500"></div>
+                <h1 class="text-6xl font-black mb-2 text-green-500 italic pool-text">BILARDO</h1>
+                <p class="text-gray-400 mb-10 text-lg">multi bilardo yaptim</p>
+                
+                <button id="btn-create" class="w-full bg-green-600 hover:bg-green-500 active:bg-green-700 text-white font-bold py-4 px-6 rounded-lg mb-6 transition-all transform hover:scale-105 shadow-lg text-2xl">
+                    Create Room
+                </button>
+                
+                <div class="flex items-center my-6">
+                    <div class="flex-grow border-t border-gray-600"></div>
+                    <span class="mx-4 text-gray-500 font-bold uppercase tracking-widest">or</span>
+                    <div class="flex-grow border-t border-gray-600"></div>
+                </div>
+
+                <div class="flex gap-3">
+                    <input type="text" id="input-join-code" placeholder="ROOM CODE" class="flex-grow bg-gray-900 border-2 border-gray-600 text-white rounded-lg px-4 py-3 uppercase text-center font-mono text-2xl focus:outline-none focus:border-blue-500 transition-colors" maxlength="4">
+                    <button id="btn-join" class="bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all shadow-lg text-xl flex-shrink-0">
+                        Join
+                    </button>
+                </div>
+                <p id="menu-error" class="text-red-400 mt-4 h-6 font-bold"></p>
+            </div>
+        </div>
+
+        <!-- Lobby (Waiting) -->
+        <div id="ui-lobby" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-gray-900 z-30 wood-bg">
+            <div class="bg-gray-800 p-10 rounded-2xl shadow-2xl border-4 border-green-700 text-center max-w-md w-full mx-4">
+                <h2 class="text-4xl font-black mb-6 text-white">Lobby</h2>
+                <p class="text-gray-400 mb-3 text-lg">Share this code with your opponent:</p>
+                <div class="bg-black border-2 border-green-500 p-6 rounded-lg text-6xl font-mono text-green-400 tracking-widest mb-8 shadow-[0_0_15px_rgba(34,197,94,0.3)]" id="lobby-code-display">
+                    XXXX
+                </div>
+                <div class="flex justify-center items-center gap-3">
+                    <div class="w-4 h-4 bg-green-500 rounded-full animate-bounce"></div>
+                    <div class="w-4 h-4 bg-green-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    <div class="w-4 h-4 bg-green-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                </div>
+                <p class="text-gray-500 mt-6 font-bold">Waiting for player 2...</p>
+                <button id="btn-cancel-lobby" class="mt-6 text-red-400 hover:text-red-300 underline">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="ui-game" class="hidden w-full h-full flex flex-col relative bg-gray-900">
+            <!-- Top HUD -->
+            <div class="w-full bg-gray-950 border-b-4 border-green-800 p-3 flex justify-between items-center z-10 shadow-2xl shrink-0">
+                <div class="flex items-center gap-4 w-1/3">
+                    <div id="p1-badge" class="px-4 py-2 rounded-lg bg-green-800 text-white font-black border-2 border-transparent transition-all shadow-md flex flex-col items-start">
+                        <span>PLAYER 1 (HOST)</span>
+                        <span id="p1-suit" class="text-xs text-yellow-300 font-semibold mt-0.5">SUIT: OPEN</span>
+                    </div>
+                </div>
+                
+                <div class="w-1/3 text-center">
+                    <div class="text-2xl font-black tracking-widest px-6 py-2 rounded-full inline-block" id="turn-indicator" style="background: rgba(0,0,0,0.5);">
+                        WAITING...
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-end gap-4 w-1/3">
+                    <div id="p2-badge" class="px-4 py-2 rounded-lg bg-blue-800 text-white font-black border-2 border-transparent transition-all shadow-md flex flex-col items-end">
+                        <span>PLAYER 2 (GUEST)</span>
+                        <span id="p2-suit" class="text-xs text-cyan-300 font-semibold mt-0.5">SUIT: OPEN</span>
+                    </div>
+                    <button id="btn-quit" class="bg-red-900 hover:bg-red-700 text-white px-3 py-2 rounded font-bold text-sm transition-colors">QUIT</button>
+                </div>
+            </div>
+            
+            <!-- Canvas Container -->
+            <div class="flex-grow flex items-center justify-center p-2 relative overflow-hidden" id="canvas-wrapper">
+                <canvas id="pool-table" width="1000" height="500"></canvas>
+                
+                <!-- Game Over Overlay -->
+                <div id="game-over-overlay" class="hidden absolute inset-0 bg-black bg-opacity-80 flex flex-col items-center justify-center z-20">
+                    <h2 id="game-over-text" class="text-7xl font-black text-white mb-8 pool-text">PLAYER 1 WINS!</h2>
+                    <button id="btn-rematch" class="bg-green-600 hover:bg-green-500 text-white font-bold py-4 px-10 rounded-xl text-3xl shadow-[0_0_20px_rgba(34,197,94,0.5)] transition-transform hover:scale-105">
+                        Back to Menu
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Web Audio Synthesizer Engine
+        let audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSound(type, volume = 1) {
+            if (!audioCtx) return;
+            const now = audioCtx.currentTime;
+            
+            if (type === 'cue') {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.08);
+                gain.gain.setValueAtTime(0.8 * Math.min(1, volume), now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.08);
+            } else if (type === 'hit') {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(900 + Math.random()*200, now);
+                osc.frequency.exponentialRampToValueAtTime(300, now + 0.03);
+                gain.gain.setValueAtTime(Math.min(0.9, 0.4 * volume), now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.03);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.03);
+            } else if (type === 'wall') {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(140, now);
+                osc.frequency.exponentialRampToValueAtTime(30, now + 0.06);
+                gain.gain.setValueAtTime(Math.min(0.6, 0.3 * volume), now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.06);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.06);
+            } else if (type === 'pocket') {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(70, now + 0.22);
+                gain.gain.setValueAtTime(0.8, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.22);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.22);
+            }
+        }
+
+        window.addEventListener('click', initAudio, { once: true });
+        window.addEventListener('touchstart', initAudio, { once: true });
+
+        // Global State & Elements
+        let app, auth, db;
+        let currentUser = null;
+        let currentGameId = null;
+        let isHost = false;
+        let unsubGame = null;
+
+        const uiLoading = document.getElementById('ui-loading');
+        const loadingText = document.getElementById('loading-text');
+        const uiMenu = document.getElementById('ui-menu');
+        const uiLobby = document.getElementById('ui-lobby');
+        const uiGame = document.getElementById('ui-game');
+        const menuError = document.getElementById('menu-error');
+        const canvas = document.getElementById('pool-table');
+        const ctx = canvas.getContext('2d');
+
+        function initApp() {
+            try {
+                window.APP_ID = "geek-pool";
+                
+                const firebaseConfig = {
+                    apiKey: "AIzaSyA0vXSMPLQUEsNAkZ9IMRnow43JfhTKjak",
+                    authDomain: "geek-pool.firebaseapp.com",
+                    projectId: "geek-pool",
+                    storageBucket: "geek-pool.firebasestorage.app",
+                    messagingSenderId: "479162680591",
+                    appId: "1:479162680591:web:14e8639f1e87c5a8c16a7a",
+                    measurementId: "G-BHJBLBQZ6Y"
+                };
+
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                
+                initAuth();
+            } catch (error) {
+                console.error("Initialization Error:", error);
+                loadingText.innerText = "Error loading configuration. Please refresh.";
+                loadingText.classList.add('text-red-400');
+            }
+        }
+
+        async function initAuth() {
+            try {
+                loadingText.innerText = "Authenticating...";
+                const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                
+                if (initialToken) {
+                    await signInWithCustomToken(auth, initialToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                currentUser = auth.currentUser;
+                if (currentUser) {
+                    showMenu();
+                } else {
+                    throw new Error("User object is null after auth.");
+                }
+            } catch (error) {
+                console.error("Auth Error:", error);
+                loadingText.innerText = "Authentication failed. Retrying in local mode...";
+                loadingText.classList.add('text-red-400');
+                
+                setTimeout(() => {
+                    currentUser = { uid: 'local-' + Math.floor(Math.random()*1000) };
+                    showMenu();
+                    showError("Running in offline mode. Multiplayer disabled.");
+                }, 2000);
+            }
+        }
+
+        function hideAll() {
+            uiLoading.classList.add('hidden');
+            uiMenu.classList.add('hidden');
+            uiLobby.classList.add('hidden');
+            uiGame.classList.add('hidden');
+            document.getElementById('game-over-overlay').classList.add('hidden');
+            menuError.innerText = '';
+        }
+
+        function showLoading(text="Loading...") { 
+            hideAll(); 
+            loadingText.innerText = text;
+            loadingText.classList.remove('text-red-400');
+            uiLoading.classList.remove('hidden'); 
+        }
+        function showMenu() { hideAll(); uiMenu.classList.remove('hidden'); }
+        function showLobby(code) { 
+            hideAll(); 
+            document.getElementById('lobby-code-display').innerText = code;
+            uiLobby.classList.remove('hidden'); 
+        }
+        function showError(msg) {
+            menuError.innerText = msg;
+            setTimeout(() => { if (menuError.innerText === msg) menuError.innerText = ''; }, 4000);
+        }
+
+        const T_W = 1000;
+        const T_H = 500;
+        const B_R = 12;
+        const P_R = 24;
+        const BORDER = 50;
+        
+        const FRICTION = 0.99;
+        const MIN_VEL = 0.05;
+        const RESTITUTION = 0.95;
+
+        class Vector2D {
+            constructor(x, y) { this.x = x; this.y = y; }
+            add(v) { return new Vector2D(this.x + v.x, this.y + v.y); }
+            sub(v) { return new Vector2D(this.x - v.x, this.y - v.y); }
+            mult(n) { return new Vector2D(this.x * n, this.y * n); }
+            mag() { return Math.sqrt(this.x * this.x + this.y * this.y); }
+            norm() { const m = this.mag(); return m === 0 ? new Vector2D(0,0) : new Vector2D(this.x/m, this.y/m); }
+            dot(v) { return this.x * v.x + this.y * v.y; }
+        }
+
+        const POCKETS = [
+            new Vector2D(BORDER, BORDER),
+            new Vector2D(T_W / 2, BORDER - 5),
+            new Vector2D(T_W - BORDER, BORDER),
+            new Vector2D(BORDER, T_H - BORDER),
+            new Vector2D(T_W / 2, T_H - BORDER + 5),
+            new Vector2D(T_W - BORDER, T_H - BORDER)
+        ];
+
+        class Ball {
+            constructor(id, type, x, y, color, isStripe = false) {
+                this.id = id;
+                this.type = type;
+                this.pos = new Vector2D(x, y);
+                this.vel = new Vector2D(0, 0);
+                this.color = color;
+                this.isStripe = isStripe;
+                this.active = true;
+            }
+
+            update() {
+                if (!this.active) return false;
+                
+                this.pos = this.pos.add(this.vel);
+                this.vel = this.vel.mult(FRICTION);
+                
+                if (this.vel.mag() < MIN_VEL) {
+                    this.vel = new Vector2D(0, 0);
+                }
+                return this.vel.mag() > 0;
+            }
+
+            draw(ctx) {
+                if (!this.active) return;
+                
+                ctx.beginPath();
+                ctx.arc(this.pos.x + 3, this.pos.y + 3, B_R, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(this.pos.x, this.pos.y, B_R, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+
+                if (this.isStripe) {
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(this.pos.x, this.pos.y, B_R, 0, Math.PI * 2);
+                    ctx.clip();
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(this.pos.x - B_R, this.pos.y - B_R, B_R * 2, B_R * 0.55);
+                    ctx.fillRect(this.pos.x - B_R, this.pos.y + B_R * 0.45, B_R * 2, B_R * 0.55);
+                    ctx.restore();
+                }
+
+                if (this.type === '8ball') {
+                    ctx.beginPath();
+                    ctx.arc(this.pos.x, this.pos.y, B_R * 0.5, 0, Math.PI*2);
+                    ctx.fillStyle = 'white';
+                    ctx.fill();
+                    ctx.fillStyle = 'black';
+                    ctx.font = 'bold 10px Inter';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('8', this.pos.x, this.pos.y + 1);
+                } else if (this.type !== 'cue') {
+                    ctx.beginPath();
+                    ctx.arc(this.pos.x, this.pos.y, B_R * 0.4, 0, Math.PI*2);
+                    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                    ctx.fill();
+                }
+
+                ctx.beginPath();
+                ctx.arc(this.pos.x - B_R*0.3, this.pos.y - B_R*0.3, B_R * 0.25, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.fill();
+            }
+        }
+
+        function createRack() {
+            let balls = [];
+            balls.push(new Ball(0, 'cue', T_W * 0.25, T_H / 2, '#ffffff'));
+            
+            const startX = T_W * 0.7;
+            const startY = T_H / 2;
+            const rowSpacing = Math.sqrt(3) * B_R + 1;
+            
+            const configs = [
+                ['#eab308', false, 'solid'], ['#2563eb', false, 'solid'], ['#dc2626', false, 'solid'],
+                ['#7c3aed', false, 'solid'], ['#ea580c', false, 'solid'], ['#16a34a', false, 'solid'],
+                ['#9f1239', false, 'solid'], ['#111827', false, '8ball'], ['#eab308', true, 'stripe'],
+                ['#2563eb', true, 'stripe'], ['#dc2626', true, 'stripe'], ['#7c3aed', true, 'stripe'],
+                ['#ea580c', true, 'stripe'], ['#16a34a', true, 'stripe'], ['#9f1239', true, 'stripe']
+            ];
+
+            const arrangement = [0, 8, 1, 2, 7, 9, 10, 3, 11, 4, 5, 12, 13, 6, 14];
+
+            let index = 0;
+            for (let row = 0; row < 5; row++) {
+                for (let col = 0; col <= row; col++) {
+                    let cfg = configs[arrangement[index]];
+                    let x = startX + row * rowSpacing;
+                    let y = startY + (col - row / 2) * (B_R * 2 + 1);
+                    balls.push(new Ball(index+1, cfg[2], x, y, cfg[0], cfg[1]));
+                    index++;
+                }
+            }
+            return balls;
+        }
+
+        let pocketedThisShot = [];
+
+        function checkCollisions(balls) {
+            const innerLeft = BORDER + B_R;
+            const innerRight = T_W - BORDER - B_R;
+            const innerTop = BORDER + B_R;
+            const innerBottom = T_H - BORDER - B_R;
+
+            for (let i = 0; i < balls.length; i++) {
+                let b = balls[i];
+                if (!b.active) continue;
+
+                // Wall Collisions
+                if (b.pos.x < innerLeft) { 
+                    b.pos.x = innerLeft; 
+                    b.vel.x *= -RESTITUTION; 
+                    playSound('wall', Math.abs(b.vel.x));
+                }
+                if (b.pos.x > innerRight) { 
+                    b.pos.x = innerRight; 
+                    b.vel.x *= -RESTITUTION; 
+                    playSound('wall', Math.abs(b.vel.x));
+                }
+                if (b.pos.y < innerTop) { 
+                    b.pos.y = innerTop; 
+                    b.vel.y *= -RESTITUTION; 
+                    playSound('wall', Math.abs(b.vel.y));
+                }
+                if (b.pos.y > innerBottom) { 
+                    b.pos.y = innerBottom; 
+                    b.vel.y *= -RESTITUTION; 
+                    playSound('wall', Math.abs(b.vel.y));
+                }
+
+                // Pocket Check
+                for (let p of POCKETS) {
+                    if (b.pos.sub(p).mag() < P_R) {
+                        b.active = false;
+                        b.vel = new Vector2D(0,0);
+                        pocketedThisShot.push(b);
+                        playSound('pocket');
+                        break;
+                    }
+                }
+            }
+
+            // Ball to Ball Collisions
+            for (let i = 0; i < balls.length; i++) {
+                for (let j = i + 1; j < balls.length; j++) {
+                    let b1 = balls[i];
+                    let b2 = balls[j];
+                    if (!b1.active || !b2.active) continue;
+
+                    let delta = b2.pos.sub(b1.pos);
+                    let dist = delta.mag();
+                    let minDist = B_R * 2;
+
+                    if (dist < minDist) {
+                        let overlap = minDist - dist;
+                        let n = delta.norm();
+                        b1.pos = b1.pos.sub(n.mult(overlap * 0.5));
+                        b2.pos = b2.pos.add(n.mult(overlap * 0.5));
+
+                        let relVel = b1.vel.sub(b2.vel);
+                        let speed = relVel.dot(n);
+
+                        if (speed < 0) continue;
+
+                        let impulse = n.mult(speed * RESTITUTION);
+                        b1.vel = b1.vel.sub(impulse);
+                        b2.vel = b2.vel.add(impulse);
+
+                        playSound('hit', speed);
+                    }
+                }
+            }
+        }
+
+        function drawTable() {
+            ctx.fillStyle = '#4a3018';
+            ctx.fillRect(0, 0, T_W, T_H);
+            
+            ctx.fillStyle = '#06170a';
+            ctx.fillRect(BORDER - 5, BORDER - 5, T_W - (BORDER-5)*2, T_H - (BORDER-5)*2);
+
+            ctx.fillStyle = '#0f5223';
+            ctx.fillRect(BORDER, BORDER, T_W - BORDER*2, T_H - BORDER*2);
+
+            ctx.beginPath();
+            ctx.moveTo(T_W * 0.25, BORDER);
+            ctx.lineTo(T_W * 0.25, T_H - BORDER);
+            ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            for (let p of POCKETS) {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, P_R, 0, Math.PI * 2);
+                ctx.fillStyle = '#000000';
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, P_R + 2, 0, Math.PI * 2);
+                ctx.strokeStyle = '#2d1a0b';
+                ctx.lineWidth = 4;
+                ctx.stroke();
+            }
+        }
+
+        let localBalls = [];
+        let gameState = {};
+        let isSimulating = false;
+        let myTurn = false;
+        let aiming = false;
+        let dragStart = {x:0, y:0};
+        let dragCurrent = {x:0, y:0};
+        let animFrame = null;
+        let isGameOver = false;
+
+        function getMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            let cx = e.clientX, cy = e.clientY;
+            if (e.touches && e.touches.length > 0) {
+                cx = e.touches[0].clientX; cy = e.touches[0].clientY;
+            }
+            return { x: (cx - rect.left) * scaleX, y: (cy - rect.top) * scaleY };
+        }
+
+        function drawAimLine() {
+            if (!aiming || !myTurn || isSimulating || isGameOver) return;
+            const cue = localBalls.find(b => b.type === 'cue');
+            if (!cue || !cue.active) return;
+
+            const dx = dragStart.x - dragCurrent.x;
+            const dy = dragStart.y - dragCurrent.y;
+            const forceMag = Math.min(new Vector2D(dx, dy).mag() * 0.1, 30);
+            
+            if (forceMag < 1) return;
+
+            const dir = new Vector2D(dx, dy).norm();
+            
+            ctx.beginPath();
+            ctx.moveTo(cue.pos.x, cue.pos.y);
+            ctx.lineTo(cue.pos.x + dir.x * (forceMag * 10), cue.pos.y + dir.y * (forceMag * 10));
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([10, 10]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            ctx.beginPath();
+            ctx.moveTo(cue.pos.x - dir.x * 20, cue.pos.y - dir.y * 20);
+            ctx.lineTo(cue.pos.x - dir.x * (30 + forceMag * 5), cue.pos.y - dir.y * (30 + forceMag * 5));
+            ctx.strokeStyle = '#8B4513';
+            ctx.lineWidth = 6;
+            ctx.stroke();
+        }
+
+        function onPointerDown(e) {
+            if (!myTurn || isSimulating || isGameOver) return;
+            initAudio();
+            const pos = getMousePos(e);
+            const cue = localBalls.find(b => b.type === 'cue');
+            if (cue && cue.active) {
+                aiming = true;
+                dragStart = pos;
+                dragCurrent = pos;
+            }
+        }
+        function onPointerMove(e) {
+            if (!aiming) return;
+            e.preventDefault();
+            dragCurrent = getMousePos(e);
+        }
+        function onPointerUp(e) {
+            if (!aiming) return;
+            aiming = false;
+            
+            if (!myTurn || isSimulating) return;
+            const cue = localBalls.find(b => b.type === 'cue');
+            if (!cue || !cue.active) return;
+
+            const dx = dragStart.x - dragCurrent.x;
+            const dy = dragStart.y - dragCurrent.y;
+            let force = new Vector2D(dx, dy).mult(0.12);
+            
+            if (force.mag() > 30) force = force.norm().mult(30);
+            if (force.mag() < 1) return;
+
+            shoot(force.x, force.y);
+        }
+
+        canvas.addEventListener('mousedown', onPointerDown);
+        canvas.addEventListener('mousemove', onPointerMove);
+        window.addEventListener('mouseup', onPointerUp);
+        canvas.addEventListener('touchstart', onPointerDown, {passive: false});
+        canvas.addEventListener('touchmove', onPointerMove, {passive: false});
+        window.addEventListener('touchend', onPointerUp);
+
+        function gameLoop() {
+            if (isGameOver) return;
+            
+            let anyMoving = false;
+            if (isSimulating) {
+                for (let b of localBalls) {
+                    if (b.update()) anyMoving = true;
+                }
+                
+                checkCollisions(localBalls);
+            }
+
+            if (isSimulating && !anyMoving) {
+                isSimulating = false;
+                onSimulationEnd();
+            }
+
+            ctx.clearRect(0, 0, T_W, T_H);
+            drawTable();
+            for (let b of localBalls) b.draw(ctx);
+            drawAimLine();
+
+            animFrame = requestAnimationFrame(gameLoop);
+        }
+
+        async function shoot(vx, vy) {
+            const cue = localBalls.find(b => b.type === 'cue');
+            if (cue) {
+                pocketedThisShot = [];
+                cue.vel = new Vector2D(vx, vy);
+                isSimulating = true;
+                playSound('cue', cue.vel.mag());
+                
+                try {
+                    await updateDoc(getGameRef(currentGameId), {
+                        lastShot: { vx, vy, ts: Date.now() }
+                    });
+                } catch (e) { console.error("Shot sync failed", e); }
+            }
+        }
+
+        async function onSimulationEnd() {
+            if (!myTurn || !currentGameId) return;
+
+            const currentRole = isHost ? 'host' : 'guest';
+            const opponentRole = isHost ? 'guest' : 'host';
+            
+            let hostSuit = gameState.hostSuit || null;
+            let guestSuit = gameState.guestSuit || null;
+            let mySuit = isHost ? hostSuit : guestSuit;
+
+            const cueScratch = pocketedThisShot.some(b => b.type === 'cue');
+            const eightBallSunk = pocketedThisShot.some(b => b.type === '8ball');
+            const objectBallsSunk = pocketedThisShot.filter(b => b.type === 'solid' || b.type === 'stripe');
+
+            // Handle Scratch Respawn
+            if (cueScratch) {
+                const cue = localBalls.find(b => b.type === 'cue');
+                if (cue) {
+                    cue.active = true;
+                    cue.pos = new Vector2D(T_W * 0.25, T_H / 2);
+                    cue.vel = new Vector2D(0, 0);
+                }
+            }
+
+            // 1. 8-Ball Rules
+            if (eightBallSunk) {
+                let winner = opponentRole;
+                
+                if (!cueScratch && mySuit) {
+                    const myRemaining = localBalls.filter(b => b.active && b.type === mySuit);
+                    if (myRemaining.length === 0) {
+                        winner = currentRole; // Legally cleared all balls and 8-ball!
+                    }
+                }
+
+                await updateDoc(getGameRef(currentGameId), {
+                    status: 'finished',
+                    winner: winner
+                });
+                return;
+            }
+
+            // 2. Assign Suits if Open
+            if (!hostSuit && !guestSuit && objectBallsSunk.length > 0) {
+                const firstType = objectBallsSunk[0].type; // 'solid' or 'stripe'
+                const otherType = firstType === 'solid' ? 'stripe' : 'solid';
+                
+                if (isHost) {
+                    hostSuit = firstType;
+                    guestSuit = otherType;
+                } else {
+                    guestSuit = firstType;
+                    hostSuit = otherType;
+                }
+                mySuit = isHost ? hostSuit : guestSuit;
+            }
+
+            // 3. Turn Progression Logic
+            let keepTurn = false;
+            if (!cueScratch && objectBallsSunk.length > 0) {
+                if (!mySuit) {
+                    keepTurn = true; // Open table, sunk a ball
+                } else {
+                    keepTurn = objectBallsSunk.some(b => b.type === mySuit);
+                }
+            }
+
+            const nextTurn = keepTurn ? currentRole : opponentRole;
+
+            const serialized = localBalls.map(b => ({
+                id: b.id, t: b.type, x: b.pos.x, y: b.pos.y, a: b.active, c: b.color, s: b.isStripe
+            }));
+
+            myTurn = false;
+            
+            // 1 second delay i added so the turn thing doesnt get fucked
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            try {
+                await updateDoc(getGameRef(currentGameId), {
+                    turn: nextTurn,
+                    hostSuit: hostSuit,
+                    guestSuit: guestSuit,
+                    balls: serialized,
+                    stateVersion: (gameState.stateVersion || 0) + 1
+                });
+            } catch (e) { console.error("End turn sync failed", e); }
+        }
+
+        function getGameRef(code) {
+            return doc(collection(db, 'artifacts', window.APP_ID, 'public', 'data', 'games'), code);
+        }
+
+        async function createRoom() {
+            if (!currentUser) return;
+            showLoading("Creating Room...");
+            
+            const code = Math.random().toString(36).substring(2, 6).toUpperCase();
+            currentGameId = code;
+            isHost = true;
+            
+            const initialBalls = createRack().map(b => ({
+                id: b.id, t: b.type, x: b.pos.x, y: b.pos.y, a: b.active, c: b.color, s: b.isStripe
+            }));
+            
+            try {
+                await setDoc(getGameRef(code), {
+                    hostId: currentUser.uid,
+                    guestId: null,
+                    status: 'waiting',
+                    turn: 'host',
+                    hostSuit: null,
+                    guestSuit: null,
+                    balls: initialBalls,
+                    lastShot: null,
+                    stateVersion: 1,
+                    timestamp: Date.now()
+                });
+                
+                setupGameListener(code);
+                showLobby(code);
+            } catch (e) {
+                console.error("Create error:", e);
+                showError("Failed to create room.");
+                showMenu();
+            }
+        }
+
+        async function joinRoom(code) {
+            if (!currentUser || !code) return;
+            showLoading("Joining Room...");
+            
+            try {
+                const docRef = getGameRef(code);
+                const docSnap = await getDoc(docRef);
+                
+                if (docSnap.exists() && docSnap.data().status === 'waiting') {
+                    isHost = false;
+                    currentGameId = code;
+                    
+                    await updateDoc(docRef, {
+                        guestId: currentUser.uid,
+                        status: 'playing'
+                    });
+                    
+                    setupGameListener(code);
+                } else {
+                    showError("Invalid or full room code.");
+                    showMenu();
+                }
+            } catch (e) {
+                console.error("Join error:", e);
+                showError("Error connecting to room.");
+                showMenu();
+            }
+        }
+
+        function setupGameListener(code) {
+            if (unsubGame) unsubGame();
+            
+            unsubGame = onSnapshot(getGameRef(code), (docSnap) => {
+                if (!docSnap.exists()) {
+                    handleQuit();
+                    showError("Room was closed by host.");
+                    return;
+                }
+                const data = docSnap.data();
+                
+                if (data.status === 'playing' && gameState.status !== 'playing') {
+                    startGame(data);
+                } else if (data.status === 'finished') {
+                    showGameOver(data.winner);
+                }
+                
+                if (data.status === 'playing') {
+                    handleSyncUpdate(data);
+                }
+                
+                gameState = data;
+                updateUIState();
+                
+            }, (error) => {
+                console.error("Sync error:", error);
+            });
+        }
+
+        function handleSyncUpdate(data) {
+            myTurn = (isHost && data.turn === 'host') || (!isHost && data.turn === 'guest');
+
+            if (data.lastShot && (!gameState.lastShot || data.lastShot.ts > gameState.lastShot.ts)) {
+                if (!myTurn && !isSimulating) {
+                    const cue = localBalls.find(b => b.type === 'cue');
+                    if (cue) {
+                        pocketedThisShot = [];
+                        cue.vel = new Vector2D(data.lastShot.vx, data.lastShot.vy);
+                        isSimulating = true;
+                        playSound('cue', cue.vel.mag());
+                    }
+                }
+            }
+
+            if (!isSimulating && data.stateVersion > (gameState.stateVersion || 0)) {
+                loadBallsFromState(data.balls);
+            }
+        }
+
+        function loadBallsFromState(ballData) {
+            localBalls = ballData.map(d => {
+                let b = new Ball(d.id, d.t, d.x, d.y, d.c, d.s);
+                b.active = d.a;
+                return b;
+            });
+        }
+
+        function startGame(data) {
+            hideAll();
+            uiGame.classList.remove('hidden');
+            isGameOver = false;
+            
+            loadBallsFromState(data.balls);
+            gameState = data;
+            
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            if (animFrame) cancelAnimationFrame(animFrame);
+            animFrame = requestAnimationFrame(gameLoop);
+        }
+
+        function updateUIState() {
+            if (gameState.status !== 'playing') return;
+            
+            const turnInd = document.getElementById('turn-indicator');
+            const p1 = document.getElementById('p1-badge');
+            const p2 = document.getElementById('p2-badge');
+            const p1Suit = document.getElementById('p1-suit');
+            const p2Suit = document.getElementById('p2-suit');
+
+            // Display Suits
+            p1Suit.innerText = gameState.hostSuit ? `SUIT: ${gameState.hostSuit.toUpperCase()}S` : "SUIT: OPEN";
+            p2Suit.innerText = gameState.guestSuit ? `SUIT: ${gameState.guestSuit.toUpperCase()}S` : "SUIT: OPEN";
+
+            if (myTurn) {
+                turnInd.innerText = "YOUR TURN";
+                turnInd.className = "text-2xl font-black tracking-widest px-6 py-2 rounded-full inline-block text-yellow-400 bg-gray-900 border-2 border-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]";
+            } else {
+                turnInd.innerText = "OPPONENT'S TURN";
+                turnInd.className = "text-2xl font-black tracking-widest px-6 py-2 rounded-full inline-block text-gray-500 bg-gray-900 border-2 border-gray-700";
+            }
+
+            const isHostTurn = gameState.turn === 'host';
+            if (isHostTurn) {
+                p1.classList.add('border-yellow-400', 'shadow-[0_0_10px_rgba(234,179,8,0.5)]');
+                p2.classList.remove('border-yellow-400', 'shadow-[0_0_10px_rgba(234,179,8,0.5)]');
+            } else {
+                p2.classList.add('border-yellow-400', 'shadow-[0_0_10px_rgba(234,179,8,0.5)]');
+                p1.classList.remove('border-yellow-400', 'shadow-[0_0_10px_rgba(234,179,8,0.5)]');
+            }
+        }
+
+        function showGameOver(winner) {
+            isGameOver = true;
+            isSimulating = false;
+            const overlay = document.getElementById('game-over-overlay');
+            const text = document.getElementById('game-over-text');
+            
+            overlay.classList.remove('hidden');
+            if ((winner === 'host' && isHost) || (winner === 'guest' && !isHost)) {
+                text.innerText = "YOU WIN!";
+                text.className = "text-7xl font-black text-green-400 mb-8 pool-text";
+            } else {
+                text.innerText = "YOU LOSE!";
+                text.className = "text-7xl font-black text-red-500 mb-8 pool-text";
+            }
+        }
+
+        async function handleQuit() {
+            if (unsubGame) { unsubGame(); unsubGame = null; }
+            if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+            
+            if (isHost && currentGameId) {
+                try {
+                    await deleteDoc(getGameRef(currentGameId));
+                } catch(e) {}
+            }
+            
+            currentGameId = null;
+            isHost = false;
+            showMenu();
+        }
+
+        function resizeCanvas() {
+            const wrapper = document.getElementById('canvas-wrapper');
+            if(!wrapper) return;
+            const w = wrapper.clientWidth - 20;
+            const h = wrapper.clientHeight - 20;
+            
+            const targetRatio = T_W / T_H;
+            const currentRatio = w / h;
+            
+            let finalW, finalH;
+            if (currentRatio > targetRatio) {
+                finalH = h; finalW = h * targetRatio;
+            } else {
+                finalW = w; finalH = w / targetRatio;
+            }
+            
+            canvas.style.width = `${finalW}px`;
+            canvas.style.height = `${finalH}px`;
+        }
+
+        document.getElementById('btn-create').addEventListener('click', createRoom);
+        document.getElementById('btn-join').addEventListener('click', () => {
+            const code = document.getElementById('input-join-code').value.trim().toUpperCase();
+            if (code.length === 4) joinRoom(code);
+            else showError("Code must be 4 characters.");
+        });
+        document.getElementById('input-join-code').addEventListener('input', (e) => {
+            e.target.value = e.target.value.toUpperCase();
+        });
+        document.getElementById('btn-cancel-lobby').addEventListener('click', handleQuit);
+        document.getElementById('btn-quit').addEventListener('click', handleQuit);
+        document.getElementById('btn-rematch').addEventListener('click', handleQuit);
+
+        window.onload = initApp;
+
+    </script>
+</body>
+</html>
